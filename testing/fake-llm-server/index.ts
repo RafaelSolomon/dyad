@@ -2,6 +2,7 @@ import express from "express";
 import { createServer } from "http";
 import cors from "cors";
 import { createChatCompletionHandler } from "./chatCompletionHandler";
+import rateLimit from "express-rate-limit";
 import {
   handleDeviceCode,
   handleAccessToken,
@@ -18,6 +19,14 @@ import {
 
 // Create Express app
 const app = express();
+
+// Set up rate limiter: maximum of 100 requests per 15 minutes per IP
+const chatCompletionLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000, // 15 minutes
+  max: 100, // limit each IP to 100 requests per windowMs
+  standardHeaders: true, // Return rate limit info in the `RateLimit-*` headers
+  legacyHeaders: false, // Disable the `X-RateLimit-*` headers
+});
 app.use(cors());
 app.use(express.json({ limit: "50mb" }));
 app.use(express.urlencoded({ extended: true, limit: "50mb" }));
@@ -185,12 +194,13 @@ app.get("/lmstudio/api/v0/models", (req, res) => {
 ["lmstudio", "gateway", "engine"].forEach((provider) => {
   app.post(
     `/${provider}/v1/chat/completions`,
+    chatCompletionLimiter,
     createChatCompletionHandler(provider),
   );
 });
 
 // Default test provider handler:
-app.post("/v1/chat/completions", createChatCompletionHandler("."));
+app.post("/v1/chat/completions", chatCompletionLimiter, createChatCompletionHandler("."));
 
 // GitHub API Mock Endpoints
 console.log("Setting up GitHub mock endpoints");
